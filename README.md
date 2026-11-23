@@ -75,7 +75,11 @@ extends:
 
 Then add **Build validation** on `main` with this pipeline, policy requirement **Optional**. Commit `.bcquality/settings.json` to the target branch (example: `examples/settings.json`; schema: `schemas/bcquality-ado.settings.schema.json`). Pin the template by tag: after changing the template, publish a new tag and update `ref:`.
 
-## Settings
+**The repository alias must be `bcquality-ado`.** The template checks out its own scripts from that alias, so the scripts that receive the API key always come from the same repository and tag as the template you `extends`. Do not rename it or add a second repository resource for the scripts.
+
+**Restrict the pool.** The `pool` parameter is set by the calling pipeline file, which a pull request can edit, and the Generate job holds the API key. Limit the pipeline's **Agent pool permissions** (Project settings > Agent pools) to the pools you intend, so a PR cannot send the job to another self-hosted pool.
+
+
 
 The standalone template reads these from `.bcquality/settings.json` on the target branch. The in-job flow (`examples/pr-validation/`) reads them from a file the pipeline writes itself, never from the repository or the pull request; there, everything beyond the basic step parameters goes in the `extraSettings` parameter (see [docs/add-to-existing-pipeline.md](docs/add-to-existing-pipeline.md)). The keys and rules are the same in both.
 
