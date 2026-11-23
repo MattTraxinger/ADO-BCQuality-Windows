@@ -33,7 +33,7 @@ $rows = foreach ($layer in $EnabledLayers) {
 
     function Get-Rel {
         param([string] $Root)
-        @(Get-ChildItem -LiteralPath $Root -Recurse -File | ForEach-Object { [System.IO.Path]::GetRelativePath($Root, $_.FullName) -replace '\\', '/' } | Sort-Object)
+        @(Get-ChildItem -LiteralPath $Root -Recurse -File -Force | ForEach-Object { [System.IO.Path]::GetRelativePath($Root, $_.FullName) -replace '\\', '/' } | Sort-Object)
     }
 }
 
