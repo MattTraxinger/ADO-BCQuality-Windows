@@ -1,5 +1,6 @@
 # BCQuality for Azure DevOps (Windows agents)
 
+[![tests](https://github.com/MattTraxinger/ADO-BCQuality-Windows/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/MattTraxinger/ADO-BCQuality-Windows/actions/workflows/tests.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 Scripts and pipeline pieces that review pull requests in Azure Repos with [BCQuality](https://github.com/microsoft/BCQuality), made to run on **Windows agents**. It mirrors the division of labor in AL-Go for GitHub's Copilot code review ([microsoft/AL-Go#2402](https://github.com/microsoft/AL-Go/pull/2402)): BCQuality owns the AL expertise, this repo owns execution, permissions and publishing. It is a worked example, not part of BCQuality.
 
 A Linux-agent version is at [ADO-BCQuality-Linux](https://github.com/MattTraxinger/ADO-BCQuality-Linux). What differs here:
