@@ -4,9 +4,6 @@
 parameters:
   - name: variableGroup          # holds COPILOT_GITHUB_TOKEN and/or ANTHROPIC_API_KEY; protect it with a Required template check
     type: string
-  - name: companionRepo          # alias of this repo in the client pipeline's resources.repositories
-    type: string
-    default: bcquality-ado
   - name: settingsPath
     type: string
     default: .bcquality/settings.json
@@ -33,7 +30,7 @@ stages:
             path: client
             fetchDepth: 0
             persistCredentials: false
-          - checkout: ${{ parameters.companionRepo }}
+          - checkout: bcquality-ado
             path: tools
           - pwsh: |
               $ErrorActionPreference = 'Stop'
@@ -74,7 +71,7 @@ stages:
             path: client
             fetchDepth: 0
             persistCredentials: false
-          - checkout: ${{ parameters.companionRepo }}
+          - checkout: bcquality-ado
             path: tools
           - download: current
             artifact: bcquality-context
@@ -106,7 +103,7 @@ stages:
         displayName: Post threads and status
         pool: ${{ parameters.pool }}
         steps:
-          - checkout: ${{ parameters.companionRepo }}   # only the template repo is listed, so PR code is not fetched here
+          - checkout: bcquality-ado   # only the template repo is listed, so PR code is not fetched here
             path: tools
           - download: current
             artifact: bcquality-context
