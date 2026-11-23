@@ -1,0 +1,43 @@
+# Keeps your organization's copy of BCQuality current. Copy this file into the FORK as .azureDevOps/sync-upstream.yml and
+# create a pipeline from it (Pipelines > New pipeline > Azure Repos Git > your fork > Existing YAML file).
+# It looks for a newer Microsoft release (v<major>.<minor> tags, never upstream's main branch), merges it into a new
+# branch sync-upstream-v<release> and opens a pull request into main. It never changes main. Setup and the permissions it
+# needs: docs/bcquality-fork.md, "Take newer Microsoft releases".
+#
+# Replace YOUR_PROJECT. The tools repository is the one that holds scripts/Sync-BCQualityFork.ps1:
+# ADO-BCQuality-Windows, or ADO-BCQuality-Linux if you use that copy.
+trigger: none   # runs on the schedule below, and by hand ("Run pipeline")
+pr: none
+
+schedules:
+  - cron: '0 13 * * 1'                 # Mondays 13:00 UTC; 'always' because the fork itself has not changed
+    displayName: Weekly check for a new BCQuality release
+    branches:
+      include: [main]
+    always: true
+
+resources:
+  repositories:
+    - repository: tools
+      type: git
+      name: YOUR_PROJECT/ADO-BCQuality-Windows
+      ref: refs/heads/main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    path: fork
+    fetchDepth: 0                      # the merge needs the full history
+
+  - checkout: tools
+    path: tools
+
+  - pwsh: |
+      & '$(Pipeline.Workspace)/tools/scripts/Sync-BCQualityFork.ps1' `
+          -RepoDir '$(Pipeline.Workspace)/fork' `
+          -CollectionUri '$(System.CollectionUri)' -Project '$(System.TeamProject)' -RepositoryId '$(Build.Repository.ID)'
+    displayName: Bring in the newest upstream BCQuality release
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)   # pushes the branch and opens the pull request; no other secret is used

@@ -1,0 +1,23 @@
+# The review step for ONE provider. It runs only when the target branch's settings chose that provider
+# (bcqProvider comes from the Context job), and only that provider's secret is mapped into the step.
+parameters:
+  - name: provider
+    type: string
+  - name: secretName
+    type: string
+  - name: displayName
+    type: string
+  - name: toolsDir
+    type: string
+
+steps:
+  - pwsh: |
+      & '${{ parameters.toolsDir }}/scripts/Run-Generate.ps1' `
+        -ContextPath '$(Pipeline.Workspace)/bcquality-context/context.json' -ToolsDir '${{ parameters.toolsDir }}/scripts' `
+        -RepoDir '$(Pipeline.Workspace)/client' -OutDir '$(Build.ArtifactStagingDirectory)/review' `
+        -BCQualityRoot '$(BCQ_ROOT)' -BCQualityCommit '$(BCQ_COMMIT)' -AgentVersion '$(AGENT_CLI_VERSION)' `
+        -RunUrl '$(System.CollectionUri)$(System.TeamProjectId)/_build/results?buildId=$(Build.BuildId)'
+    displayName: Review, validate, plan (${{ parameters.displayName }})
+    condition: and(succeeded(), eq(variables['bcqProvider'], '${{ parameters.provider }}'))
+    env:
+      ${{ parameters.secretName }}: $(${{ parameters.secretName }})   # this one step only; no System.AccessToken here

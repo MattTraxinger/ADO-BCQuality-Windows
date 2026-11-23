@@ -1,0 +1,126 @@
+# BCQuality PR review for Azure Repos. Client pipelines `extends` this template from a pinned tag.
+# Review stage: reads the PR as data only, holds the agent's secret, has no PR write access.
+# Publish stage: holds PR-thread write only, has no agent secret. Findings cross only as an artifact.
+parameters:
+  - name: variableGroup          # holds COPILOT_GITHUB_TOKEN and/or ANTHROPIC_API_KEY; protect it with a Required template check
+    type: string
+  - name: companionRepo          # alias of this repo in the client pipeline's resources.repositories
+    type: string
+    default: bcquality-ado
+  - name: settingsPath
+    type: string
+    default: .bcquality/settings.json
+  - name: defaultBCQualityVersion  # used when settings omit BCQuality.version, major.minor
+    type: string
+    default: ''
+  - name: pool                   # a Windows pool: { vmImage: windows-latest } or { name: <self-hosted pool> }
+    type: object
+    default:
+      vmImage: windows-latest
+  - name: timeoutMinutes
+    type: number
+    default: 60
+
+stages:
+  - stage: Review
+    displayName: BCQuality review (read-only)
+    jobs:
+      - job: Context
+        displayName: Context
+        pool: ${{ parameters.pool }}
+        steps:
+          - checkout: self
+            path: client
+            fetchDepth: 0
+            persistCredentials: false
+          - checkout: ${{ parameters.companionRepo }}
+            path: tools
+          - pwsh: |
+              $ErrorActionPreference = 'Stop'
+              . '$(Pipeline.Workspace)/tools/scripts/AzureDevOps.ps1'
+              $ctx = New-AdoContext -CollectionUri '$(System.CollectionUri)' -Project '$(System.TeamProject)' `
+                -RepositoryId '$(Build.Repository.ID)' -PullRequestId $(System.PullRequest.PullRequestId) -Token $env:SYSTEM_ACCESSTOKEN
+              $pr = Get-AdoPullRequest $ctx   # read-only call; this job runs no agent and no PR code
+              Write-Host "##vso[task.setvariable variable=prIsDraft]$([bool]$pr.isDraft)"
+              Write-Host "##vso[task.setvariable variable=prAuthor]$($pr.createdBy.uniqueName)"
+            displayName: Read PR metadata
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+          - pwsh: |
+              & '$(Pipeline.Workspace)/tools/scripts/Get-PrContext.ps1' `
+                -RepoDir '$(Pipeline.Workspace)/client' -OutDir '$(Build.ArtifactStagingDirectory)/context' `
+                -TargetBranch '$(System.PullRequest.TargetBranch)' -HeadSha '$(System.PullRequest.SourceCommitId)' `
+                -AuthorIdentity '$(prAuthor)' -IsDraft ([bool]::Parse('$(prIsDraft)')) `
+                -SchemaPath '$(Pipeline.Workspace)/tools/schemas/bcquality-ado.settings.schema.json' `
+                -SettingsPath '${{ parameters.settingsPath }}' -DefaultBCQualityVersion '${{ parameters.defaultBCQualityVersion }}'
+            name: ctx
+            displayName: Resolve context (settings from target branch)
+          - publish: $(Build.ArtifactStagingDirectory)/context
+            artifact: bcquality-context
+            condition: always()
+
+      - job: Generate
+        displayName: Generate and validate
+        dependsOn: Context
+        condition: and(succeeded(), eq(dependencies.Context.outputs['ctx.skip'], 'false'))
+        timeoutInMinutes: ${{ parameters.timeoutMinutes }}
+        pool: ${{ parameters.pool }}
+        variables:
+          - group: ${{ parameters.variableGroup }}
+          - name: bcqProvider   # from the target branch's settings, via the Context job
+            value: $[ dependencies.Context.outputs['ctx.provider'] ]
+        steps:
+          - checkout: self
+            path: client
+            fetchDepth: 0
+            persistCredentials: false
+          - checkout: ${{ parameters.companionRepo }}
+            path: tools
+          - download: current
+            artifact: bcquality-context
+          - pwsh: |
+              git -C '$(Pipeline.Workspace)/client' checkout --detach '$(System.PullRequest.SourceCommitId)'
+              if ($LASTEXITCODE -ne 0) { throw 'Could not check out the reviewed head.' }
+            displayName: Check out the reviewed head (data only)
+          - template: steps/setup-agent.yml
+            parameters: { toolsDir: '$(Pipeline.Workspace)/tools' }
+          - template: steps/setup-bcquality.yml
+            parameters:
+              contextPath: $(Pipeline.Workspace)/bcquality-context/context.json
+              toolsDir: $(Pipeline.Workspace)/tools
+          # One step per provider; only the chosen provider's step runs, with only its secret mapped in.
+          - template: steps/generate.yml
+            parameters: { provider: copilot, secretName: COPILOT_GITHUB_TOKEN, displayName: Copilot, toolsDir: '$(Pipeline.Workspace)/tools' }
+          - template: steps/generate.yml
+            parameters: { provider: claude-code, secretName: ANTHROPIC_API_KEY, displayName: Claude Code, toolsDir: '$(Pipeline.Workspace)/tools' }
+          - publish: $(Build.ArtifactStagingDirectory)/review
+            artifact: bcquality-review
+            condition: always()
+
+  - stage: Publish
+    displayName: Publish to the pull request
+    dependsOn: Review
+    condition: not(canceled())
+    jobs:
+      - job: Post
+        displayName: Post threads and status
+        pool: ${{ parameters.pool }}
+        steps:
+          - checkout: ${{ parameters.companionRepo }}   # only the template repo is listed, so PR code is not fetched here
+            path: tools
+          - download: current
+            artifact: bcquality-context
+            continueOnError: true
+          - download: current
+            artifact: bcquality-review
+            continueOnError: true
+          - pwsh: |
+              & '$(Pipeline.Workspace)/tools/scripts/Publish-PrReview.ps1' `
+                -ContextPath '$(Pipeline.Workspace)/bcquality-context/context.json' `
+                -PlanPath '$(Pipeline.Workspace)/bcquality-review/publish-plan.json' `
+                -CollectionUri '$(System.CollectionUri)' -Project '$(System.TeamProject)' -RepositoryId '$(Build.Repository.ID)' `
+                -PullRequestId $(System.PullRequest.PullRequestId) `
+                -RunUrl '$(System.CollectionUri)$(System.TeamProjectId)/_build/results?buildId=$(Build.BuildId)'
+            displayName: Post findings
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)   # no agent secret in this job

@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BCQuality for Azure DevOps settings",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "BCQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+(\\.\\d+)?$" },
+        "repo": { "type": "string", "pattern": "^https://" },
+        "enabledLayers": {
+          "type": "array",
+          "items": { "enum": ["microsoft", "community", "custom"] },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "disabledSkills": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "knowledge": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allow": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "deny": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          }
+        }
+      }
+    },
+    "CodeReviewAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "branches": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "excludedAuthors": { "type": "array", "items": { "type": "string" } },
+        "suggestions": { "enum": ["apply", "manual", "off"] },
+        "nearDuplicateLines": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "regional": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "layouts": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^(?=.*\\{region\\})(?=.*\\{path\\})[^\\\\]+$" }
+            },
+            "primary": { "type": "string", "minLength": 1 }
+          }
+        },
+        "provider": { "enum": ["copilot", "claude-code"] },
+        "model": { "type": "string" },
+        "leafModel": { "type": "string" },
+        "consolidation": { "enum": ["host", "agent"] }
+      }
+    },
+    "appFolders": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "bcVersion": { "type": "string", "pattern": "^\\d+$" },
+    "maxChangedFiles": { "type": "integer", "minimum": 1 },
+    "mode": { "enum": ["advisory", "status"] },
+    "tier": { "enum": [1, 2] }
+  }
+}

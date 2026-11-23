@@ -1,0 +1,126 @@
+# REFERENCE: copy this file into your pipeline templates and include it in the job that validates pull requests:
+#
+#     - template: bcquality-review-steps.yml
+#
+# It runs the BCQuality review as steps inside a job that already checks out the PR. This repo changes nothing
+# in your pipeline: you decide where the file lives, what gates it, and which secret feeds it.
+#
+# Gating: every step also requires the `condition` parameter (default 'true'), so your pipeline decides when a review runs.
+# Advisory: every step is continueOnError, so a BCQuality problem never fails PR validation. If something breaks
+# after the PR was read, Publish still posts a FAILED summary, so silence is never mistaken for a clean review.
+#
+# Secrets: the job must expose the provider's secret as a pipeline variable (for example from a variable group or a
+# Key Vault task); anthropicKeyVariable / copilotTokenVariable name it. Only the chosen
+# provider's secret is mapped, and only into the Review step. System.AccessToken goes only into Prepare and
+# Publish. No step that runs the agent gets the PR token, and no step that gets the PR token runs the agent.
+#
+# Needs: this repository's scripts\, schemas\ and package.json available under <scriptsRoot> (by checkout, release
+# download or your own package); PowerShell 7.5+, Node + npm, and outbound access to the npm registry, github.com (the
+# BCQuality clone) and the model API on the agent.
+parameters:
+  - name: condition                # extra gate, ANDed into every step, e.g. "eq(variables['RunBCQuality'], 'true')"
+    type: string
+    default: 'true'
+  - name: anthropicKeyVariable     # name of the pipeline variable that holds the Anthropic key (provider claude-code)
+    type: string
+    default: ANTHROPIC_API_KEY
+  - name: copilotTokenVariable     # name of the pipeline variable that holds the GitHub token (provider copilot)
+    type: string
+    default: COPILOT_GITHUB_TOKEN
+  - name: scriptsRoot
+    type: string
+    default: '$(Agent.TempDirectory)\bcquality-scripts'   # outside the PR's working tree: the Review step holds an API key
+  - name: provider                 # claude-code | copilot (compile time: picks which secret is mapped)
+    type: string
+    default: claude-code
+  - name: model                    # consolidation model; use a full model name, aliases can resolve to older models
+    type: string
+    default: claude-sonnet-5-5
+  - name: leafModel                # per review-area model
+    type: string
+    default: claude-sonnet-5-5
+  - name: bcqualityVersion         # BCQuality release, major.minor
+    type: string
+    default: '1.9'
+  - name: enabledLayers            # comma separated: microsoft,community,custom
+    type: string
+    default: 'microsoft,community'
+  - name: workDir
+    type: string
+    default: '$(Agent.TempDirectory)\bcquality-work'
+  - name: extraSettings            # optional JSON object merged over the settings above, e.g.
+    type: string                   #   '{"BCQuality":{"disabledSkills":["microsoft/skills/review/al-finance-review.md"]}}'
+    default: ''                    # anything the settings schema allows; see docs/add-to-existing-pipeline.md
+
+steps:
+  # The pipeline owns the settings: this file is written here, outside the PR tree, so a PR cannot change its own review
+  # rules. The work is in a script (tested in this repo) rather than inline, so new settings never need a YAML change.
+  # branches is always '**': the condition parameter is the real gate, and a target branch name is not interpolated into a
+  # branch pattern, where a name containing + would not match itself.
+  - task: PowerShell@2
+    displayName: 'BCQuality: Write settings'
+    condition: and(succeeded(), ${{ parameters.condition }})
+    continueOnError: true
+    inputs:
+      pwsh: true
+      targetType: filepath
+      filePath: '${{ parameters.scriptsRoot }}\scripts\New-ReviewSettings.ps1'
+      arguments: '-OutFile "${{ parameters.workDir }}\settings.json" -BCQualityVersion "${{ parameters.bcqualityVersion }}" -EnabledLayers "${{ parameters.enabledLayers }}" -Provider "${{ parameters.provider }}" -Model "${{ parameters.model }}" -LeafModel "${{ parameters.leafModel }}" -SchemaPath "${{ parameters.scriptsRoot }}\schemas\bcquality-ado.settings.schema.json"'
+      failOnStderr: false
+    env:
+      BCQ_EXTRA_SETTINGS: '${{ parameters.extraSettings }}'   # passed through the environment so JSON needs no command-line quoting
+
+  - task: PowerShell@2
+    displayName: 'BCQuality: Install agent CLI'
+    condition: and(succeeded(), ${{ parameters.condition }})
+    continueOnError: true
+    inputs:
+      pwsh: true
+      targetType: filepath
+      filePath: '${{ parameters.scriptsRoot }}\scripts\Install-AgentCli.ps1'
+      arguments: '-SettingsFile "${{ parameters.workDir }}\settings.json" -PackageJsonPath "${{ parameters.scriptsRoot }}\package.json" -InstallRoot "${{ parameters.workDir }}\agent"'
+      failOnStderr: false
+
+  - task: PowerShell@2
+    name: bcqPrepare
+    displayName: 'BCQuality: Prepare'
+    condition: and(succeeded(), ${{ parameters.condition }})
+    continueOnError: true
+    inputs:
+      pwsh: true
+      targetType: filepath
+      filePath: '${{ parameters.scriptsRoot }}\scripts\Prepare-PrReview.ps1'
+      arguments: '-ScriptsRoot "${{ parameters.scriptsRoot }}" -RepoDir "$(Build.SourcesDirectory)" -WorkDir "${{ parameters.workDir }}" -SettingsFile "${{ parameters.workDir }}\settings.json" -CollectionUri "$(System.CollectionUri)" -Project "$(System.TeamProject)" -RepositoryId "$(Build.Repository.ID)" -PullRequestId $(System.PullRequest.PullRequestId) -TargetBranch "$(System.PullRequest.TargetBranch)" -HeadSha "$(System.PullRequest.SourceCommitId)"'
+      failOnStderr: false
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)   # read the PR; no AI secret in this step
+
+  - task: PowerShell@2
+    displayName: 'BCQuality: Review'
+    condition: and(succeeded(), ${{ parameters.condition }}, eq(variables['BCQ_CONTEXT'], 'true'), ne(variables['BCQ_SKIP'], 'true'), eq(variables['BCQ_READY'], 'true'), ne(variables['BCQ_AGENT_PATH'], ''))
+    continueOnError: true
+    inputs:
+      pwsh: true
+      targetType: filepath
+      filePath: '${{ parameters.scriptsRoot }}\scripts\Run-Generate.ps1'
+      arguments: '-ContextPath "${{ parameters.workDir }}\context\context.json" -ToolsDir "${{ parameters.scriptsRoot }}\scripts" -RepoDir "$(BCQ_REPO_DIR)" -OutDir "$(Build.ArtifactStagingDirectory)\bcquality-review" -BCQualityRoot "$(BCQ_ROOT)" -BCQualityCommit "$(BCQ_COMMIT)" -AgentVersion "$(AGENT_CLI_VERSION)" -RunUrl "$(System.CollectionUri)$(System.TeamProjectId)/_build/results?buildId=$(Build.BuildId)"'
+      failOnStderr: false
+    env:
+      # Only the chosen provider's secret, only in this step; no System.AccessToken here.
+      ${{ if eq(parameters.provider, 'claude-code') }}:
+        ANTHROPIC_API_KEY: $(${{ parameters.anthropicKeyVariable }})
+      ${{ if eq(parameters.provider, 'copilot') }}:
+        COPILOT_GITHUB_TOKEN: $(${{ parameters.copilotTokenVariable }})
+
+  - task: PowerShell@2
+    displayName: 'BCQuality: Publish'
+    condition: and(succeeded(), ${{ parameters.condition }}, eq(variables['BCQ_CONTEXT'], 'true'), ne(variables['BCQ_SKIP'], 'true'))
+    continueOnError: true
+    inputs:
+      pwsh: true
+      targetType: filepath
+      filePath: '${{ parameters.scriptsRoot }}\scripts\Publish-PrReview.ps1'
+      arguments: '-ContextPath "${{ parameters.workDir }}\context\context.json" -PlanPath "$(Build.ArtifactStagingDirectory)\bcquality-review\publish-plan.json" -CollectionUri "$(System.CollectionUri)" -Project "$(System.TeamProject)" -RepositoryId "$(Build.Repository.ID)" -PullRequestId $(System.PullRequest.PullRequestId) -RunUrl "$(System.CollectionUri)$(System.TeamProjectId)/_build/results?buildId=$(Build.BuildId)"'
+      failOnStderr: false
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)   # write PR threads; no AI secret in this step

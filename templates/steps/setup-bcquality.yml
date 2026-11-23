@@ -1,0 +1,17 @@
+# Clones the pinned BCQuality release OUTSIDE the client checkout and records its commit.
+# Sets BCQ_ROOT and BCQ_COMMIT. Layers and disabled skills are applied per call by Invoke-BCQualityReview.ps1
+# through the task context. Disabled layers and knowledge allow/deny rules are applied by deleting files from this
+# temporary clone (scripts/KnowledgePolicy.ps1) before the index is built, because BCQuality's own tools do not enforce them.
+# The work lives in scripts/Initialize-BCQuality.ps1 so the in-job (non-template) flow shares it.
+parameters:
+  - name: contextPath
+    type: string
+  - name: toolsDir
+    type: string
+
+steps:
+  - pwsh: |
+      & '${{ parameters.toolsDir }}/scripts/Initialize-BCQuality.ps1' -ContextPath '${{ parameters.contextPath }}' -TempDir '$(Agent.TempDirectory)'
+    displayName: Install pinned BCQuality
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)   # only for cloning a BCQuality fork in this organization; no AI secret in this step

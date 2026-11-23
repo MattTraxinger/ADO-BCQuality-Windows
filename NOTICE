@@ -1,0 +1,4 @@
+The scripts in this repository are written from the public design of AL-Go for
+GitHub's Copilot code review (https://github.com/microsoft/AL-Go/pull/2402).
+No AL-Go source has been copied. If code is ported from AL-Go, add its
+copyright notice here and link the source file.

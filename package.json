@@ -1,0 +1,9 @@
+{
+  "name": "bcquality-for-ado",
+  "private": true,
+  "description": "Pins the agent CLIs used by the BCQuality Azure DevOps review template. Each provider's pin is used only when the target branch's settings choose that provider.",
+  "dependencies": {
+    "@github/copilot": "1.0.105",
+    "@anthropic-ai/claude-code": "2.1.187"
+  }
+}

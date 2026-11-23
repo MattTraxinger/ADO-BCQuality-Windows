@@ -1,0 +1,18 @@
+# Client repo pipeline: copy to azure-pipelines/bcquality.yml in the repo being reviewed.
+# Queue it only through a Build validation branch policy (Optional), never on plain pushes.
+
+trigger: none   # never runs on push
+pr: none        # Azure Repos PRs use the branch policy, not this key
+
+resources:
+  repositories:
+    - repository: bcquality-ado
+      type: git                                  # Azure Repos
+      name: <Project>/<Template repo name>       # e.g. Internal/ADO-BCQuality-Windows
+      ref: refs/tags/v0.1.0                      # pin a tag; do not use a branch
+
+extends:
+  template: templates/bcquality-pr-review.yml@bcquality-ado
+  parameters:
+    variableGroup: bcquality-secrets             # holds COPILOT_GITHUB_TOKEN (provider copilot) or ANTHROPIC_API_KEY (provider claude-code); protect with a Required template check
+    defaultBCQualityVersion: '1.9'               # used when settings omit BCQuality.version

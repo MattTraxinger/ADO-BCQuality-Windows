@@ -1,0 +1,20 @@
+# Installs PowerShell 7.5+ if the agent lacks it, then the exact CLI version pinned in package.json for the
+# provider chosen by the target branch's settings (bcqProvider, set from the Context job).
+# Windows and Linux safe: the CLI goes into a private folder (never the agent's global npm folder), and
+# scripts/Install-AgentCli.ps1 publishes how to launch it (BCQ_AGENT_PATH). No secrets in these steps.
+parameters:
+  - name: toolsDir
+    type: string
+
+steps:
+  - pwsh: |
+      if ($PSVersionTable.PSVersion -lt [version]'7.5') {
+        dotnet tool install --global PowerShell --version 7.5.*
+        $dotnetTools = if ($IsWindows) { Join-Path $env:USERPROFILE '.dotnet\tools' } else { Join-Path $env:HOME '.dotnet/tools' }
+        Write-Host "##vso[task.prependpath]$dotnetTools"
+      }
+    displayName: Ensure PowerShell 7.5+
+  - pwsh: |
+      & '${{ parameters.toolsDir }}/scripts/Install-AgentCli.ps1' -Provider '$(bcqProvider)' `
+        -PackageJsonPath '${{ parameters.toolsDir }}/package.json' -InstallRoot '$(Agent.TempDirectory)/agent'
+    displayName: Install pinned agent CLI ($(bcqProvider))

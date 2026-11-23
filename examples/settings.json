@@ -1,0 +1,7 @@
+{
+  "BCQuality": { "version": "1.9", "enabledLayers": ["microsoft", "community"] },
+  "CodeReviewAgent": { "enabled": true, "branches": ["main"], "excludedAuthors": [], "provider": "copilot" },
+  "appFolders": [],
+  "mode": "advisory",
+  "tier": 2
+}

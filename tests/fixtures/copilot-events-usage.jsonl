@@ -1,0 +1,8 @@
+{"type":"session.start","data":{"sessionId":"fixture"}}
+{"type":"tool.execution_start","data":{"toolCallId":"a","toolName":"view","arguments":{"path":"C:\\bcq-fixture\\microsoft\\knowledge\\x\\full.md"}}}
+{"type":"session.usage_record","data":{"usage":{"model":"claude-sonnet-5.5","inputTokens":30459,"outputTokens":101,"cacheReadTokens":0,"cacheWriteTokens":30455,"reasoningTokens":0,"cost":1.0,"duration":1945,"copilotUsage":{"totalNanoAiu":7715550000}}}}
+{"type":"tool.execution_complete","data":{"toolCallId":"a","success":true}}
+this line is not json and must be skipped
+{"type":"session.usage_record","data":{"usage":{"model":"claude-sonnet-5.5","inputTokens":32631,"outputTokens":169,"cacheReadTokens":30455,"cacheWriteTokens":2174,"reasoningTokens":0,"cost":1.0,"duration":3746,"copilotUsage":{"totalNanoAiu":1017450000}}}}
+{"type":"assistant.message","data":{"model":"claude-sonnet-5.5","content":"ignored"}}
+{"type":"session.usage_record","data":{"usage":{"model":"claude-sonnet-5.5","inputTokens":32845,"outputTokens":260,"cacheReadTokens":32629,"cacheWriteTokens":212,"reasoningTokens":48,"cost":1.0,"duration":2954,"copilotUsage":{"totalNanoAiu":640090000}}}}
