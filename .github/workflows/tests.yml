@@ -1,0 +1,46 @@
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  pester:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Git identity for tests that commit
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@example.invalid"
+      - name: Ensure PowerShell 7.5+
+        shell: pwsh
+        run: |
+          $exe = (Get-Process -Id $PID).Path
+          if ($PSVersionTable.PSVersion -lt [version]'7.5') {
+            dotnet tool install PowerShell --version 7.5.4 --tool-path "$env:RUNNER_TEMP/pwsh"
+            $exe = Join-Path "$env:RUNNER_TEMP/pwsh" ($IsWindows ? 'pwsh.exe' : 'pwsh')
+          }
+          & $exe -v
+          "PWSH=$exe" >> $env:GITHUB_ENV
+      - name: Pester
+        shell: pwsh
+        run: |
+          & $env:PWSH -NoProfile -Command {
+            Install-Module Pester -MinimumVersion 5.5 -Force -Scope CurrentUser
+            Import-Module Pester -MinimumVersion 5.5
+            $c = New-PesterConfiguration
+            $c.Run.Path = './tests'; $c.Run.Exit = $true
+            $c.Output.Verbosity = 'Detailed'
+            Invoke-Pester -Configuration $c
+          }
+          exit $LASTEXITCODE
