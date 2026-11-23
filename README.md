@@ -379,16 +379,6 @@ Locally on Windows 11 with PowerShell 7.6 (the Pester suite, 63 tests, passes):
 - The YAML pieces are unvalidated until Azure DevOps parses them.
 - Copilot on Windows (started as `node npm-loader.js`) has not been run; Claude Code is the tested provider.
 
-## Not yet verified
-
-- **Required-template check.** It blocks every bypass: a PR that edits the pipeline file to skip the template must not be able to read the token. Highest priority.
-- A PR that edits `.bcquality/settings.json` does not change that run's settings (the code reads the target branch; the live test is not done).
-- Rerunning on an unchanged PR creates no new threads (fingerprints in thread properties); a push during a run makes Publish post nothing.
-- Findings are anchored to the correct right-side line (`threadContext` fields).
-- A forced `partial` is shown as `partial` in the summary and the status; `status` mode and the PR status context.
-- Host consolidation: how often the acceptance gate rejects the host's merged report (the agent then does the roll-up). That fallback has been tested only with unit tests, not on a live run.
-- Whether the one retry is enough: how often areas still fail validation (for example JSON escaping of AL quotes), and run duration against the 60-minute job limit on larger PRs.
-- Whether AL-Go's `Git.ps1`, `FindingPlacement.ps1` and `FindingDeduplication.ps1` can replace the clean-room versions here; if any code is ported, keep AL-Go's copyright notice (see `NOTICE`).
 
 ## Tests
 
